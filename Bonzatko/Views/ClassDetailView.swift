@@ -1,11 +1,15 @@
 import SwiftUI
 
-/// Student list of one class: add, rename, remove, restore and import.
+/// One class: its students (add, rename, remove, restore, import) and its lessons.
 struct ClassDetailView: View {
     let classID: UUID
     let onDelete: () -> Void
 
     @Environment(ClassStore.self) private var store
+    @Environment(Navigator.self) private var navigator
+
+    private enum Tab: Hashable { case students, lessons }
+    @State private var tab: Tab = .students
 
     @State private var newName = ""
     @FocusState private var isAddFieldFocused: Bool
@@ -47,6 +51,89 @@ struct ClassDetailView: View {
                     .padding(.bottom, 8)
             }
 
+            HStack {
+                Picker("Zobrazit", selection: $tab) {
+                    Text("Studenti (\(active.count))").tag(Tab.students)
+                    Text("Hodiny (\(schoolClass.lessons.count))").tag(Tab.lessons)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                Spacer()
+                Button("Pokračovat v poslední Hodině") {
+                    if let last = schoolClass.lastLesson {
+                        navigator.openLesson = LessonRef(classID: classID, lessonID: last.id)
+                    }
+                }
+                .disabled(schoolClass.lastLesson == nil || schoolClass.isArchived)
+                NewLessonButton(schoolClass: schoolClass)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
+
+            if tab == .lessons {
+                LessonListView(schoolClass: schoolClass)
+            } else {
+                studentList(schoolClass, active: active, removed: removed)
+            }
+        }
+        .toolbar {
+            if tab == .students {
+                ToolbarItemGroup {
+                    Button("Odebrat vybrané", systemImage: "person.badge.minus") {
+                        isConfirmingRemoval = true
+                    }
+                    .disabled(checkedIDs.isEmpty || schoolClass.isArchived)
+                    .help("Odebrat zaškrtnuté studenty")
+
+                    Button("Importovat…", systemImage: "square.and.arrow.down") {
+                        isImporting = true
+                    }
+                    .disabled(schoolClass.isArchived)
+                    .help("Hromadně přidat studenty z textu nebo souboru")
+                }
+            }
+        }
+        .navigationTitle(schoolClass.name)
+        .onAppear { isAddFieldFocused = !schoolClass.isArchived }
+        .confirmationDialog(removalTitle(active), isPresented: $isConfirmingRemoval) {
+            Button("Odebrat", role: .destructive) {
+                store.removeStudents(checkedIDs, from: classID)
+                checkedIDs = []
+            }
+        } message: {
+            Text("Odebraní studenti se už nebudou losovat. Historie jim zůstane a můžete je kdykoli vrátit.")
+        }
+        .alert("Student už ve třídě je", isPresented: Binding(get: { duplicateName != nil },
+                                                              set: { if !$0 { duplicateName = nil } })) {
+            if let duplicateName {
+                let alternative = Names.disambiguate(duplicateName, takenKeys: Set(schoolClass.students.map { Names.key($0.name) }))
+                Button("Přidat jako „\(alternative)“") {
+                    store.addStudents([alternative], to: classID)
+                    newName = ""
+                    isAddFieldFocused = true
+                }
+                Button("Přeskočit", role: .cancel) {
+                    newName = ""
+                    isAddFieldFocused = true
+                }
+            }
+        } message: {
+            Text(duplicateMessage(schoolClass))
+        }
+        .sheet(isPresented: $isEditingClass) {
+            ClassFormSheet(mode: .edit(name: schoolClass.name, abbreviation: schoolClass.abbreviation)) { name, abbreviation in
+                store.updateClass(classID, name: name, abbreviation: abbreviation)
+            }
+        }
+        .sheet(isPresented: $isImporting) {
+            ImportSheet(classID: classID)
+        }
+    }
+
+    @ViewBuilder
+    private func studentList(_ schoolClass: SchoolClass, active: [Student], removed: [Student]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
                 TextField("Přidat studenta", text: $newName, prompt: Text("Napište jméno a stiskněte Enter"))
                     .textFieldStyle(.roundedBorder)
@@ -92,56 +179,6 @@ struct ClassDetailView: View {
                 }
             }
             .listStyle(.inset(alternatesRowBackgrounds: true))
-        }
-        .toolbar {
-            ToolbarItemGroup {
-                Button("Odebrat vybrané", systemImage: "person.badge.minus") {
-                    isConfirmingRemoval = true
-                }
-                .disabled(checkedIDs.isEmpty || schoolClass.isArchived)
-                .help("Odebrat zaškrtnuté studenty")
-
-                Button("Importovat…", systemImage: "square.and.arrow.down") {
-                    isImporting = true
-                }
-                .disabled(schoolClass.isArchived)
-                .help("Hromadně přidat studenty z textu nebo souboru")
-            }
-        }
-        .navigationTitle(schoolClass.name)
-        .onAppear { isAddFieldFocused = !schoolClass.isArchived }
-        .confirmationDialog(removalTitle(active), isPresented: $isConfirmingRemoval) {
-            Button("Odebrat", role: .destructive) {
-                store.removeStudents(checkedIDs, from: classID)
-                checkedIDs = []
-            }
-        } message: {
-            Text("Odebraní studenti se už nebudou losovat. Historie jim zůstane a můžete je kdykoli vrátit.")
-        }
-        .alert("Student už ve třídě je", isPresented: Binding(get: { duplicateName != nil },
-                                                              set: { if !$0 { duplicateName = nil } })) {
-            if let duplicateName {
-                let alternative = Names.disambiguate(duplicateName, takenKeys: Set(schoolClass.students.map { Names.key($0.name) }))
-                Button("Přidat jako „\(alternative)“") {
-                    store.addStudents([alternative], to: classID)
-                    newName = ""
-                    isAddFieldFocused = true
-                }
-                Button("Přeskočit", role: .cancel) {
-                    newName = ""
-                    isAddFieldFocused = true
-                }
-            }
-        } message: {
-            Text(duplicateMessage(schoolClass))
-        }
-        .sheet(isPresented: $isEditingClass) {
-            ClassFormSheet(mode: .edit(name: schoolClass.name, abbreviation: schoolClass.abbreviation)) { name, abbreviation in
-                store.updateClass(classID, name: name, abbreviation: abbreviation)
-            }
-        }
-        .sheet(isPresented: $isImporting) {
-            ImportSheet(classID: classID)
         }
     }
 

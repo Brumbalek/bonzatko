@@ -204,7 +204,7 @@ struct ClassStoreTests {
         let a = Student(name: "Adam Bílý"), b = Student(name: "Bára Černá")
         schoolClass.students = [a, b]
         schoolClass.lessons = [
-            Lesson(name: "L1", isClosed: true, draws: [Draw(studentID: a.id, result: .present), Draw(studentID: b.id, result: .absent)]),
+            Lesson(name: "L1", draws: [Draw(studentID: a.id, result: .present), Draw(studentID: b.id, result: .absent)]),
             Lesson(name: "L2", draws: [Draw(studentID: a.id, result: .present), Draw(studentID: b.id, result: .skipped)]),
         ]
         // Adam has 2 recorded draws, Bára 1 (the skipped draw does not count).

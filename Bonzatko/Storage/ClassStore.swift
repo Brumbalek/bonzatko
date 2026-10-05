@@ -66,6 +66,40 @@ final class ClassStore {
         }
     }
 
+    // MARK: Lessons
+
+    /// Starts a new lesson. The previous lesson is closed for good (it is no longer the last one).
+    @discardableResult
+    func createLesson(in classID: UUID, date: Date = .now) -> UUID? {
+        guard let schoolClass = schoolClass(classID), !schoolClass.isArchived else { return nil }
+        let name = LessonNaming.defaultName(className: schoolClass.name, date: date, existingNames: schoolClass.lessons.map(\.name))
+        let lesson = Lesson(name: name, createdAt: date)
+        update(classID) { $0.lessons.append(lesson) }
+        return lesson.id
+    }
+
+    /// Renames the open (last) lesson. Returns an error message when the name cannot be used.
+    @discardableResult
+    func renameLesson(_ lessonID: UUID, to newName: String, in classID: UUID) -> String? {
+        guard let schoolClass = schoolClass(classID), schoolClass.isOpen(lessonID), !schoolClass.isArchived else {
+            return "Přejmenovat lze jen poslední Hodinu."
+        }
+        if let error = LessonNaming.validationError(for: newName, renaming: lessonID, in: schoolClass) {
+            return error
+        }
+        update(classID) { schoolClass in
+            schoolClass.lessons[schoolClass.lessons.count - 1].name = Names.clean(newName)
+        }
+        return nil
+    }
+
+    /// Deletes the last lesson; the one before becomes the last and can be continued again.
+    func deleteLastLesson(in classID: UUID) {
+        update(classID) { schoolClass in
+            _ = schoolClass.lessons.popLast()
+        }
+    }
+
     // MARK: Students
 
     /// Adds names exactly as given (already resolved for duplicates).
