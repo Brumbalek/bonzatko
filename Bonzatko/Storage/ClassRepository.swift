@@ -11,8 +11,15 @@ struct ClassRepository: Sendable {
             .appending(path: "Classes", directoryHint: .isDirectory)
     }
 
-    init(directory: URL = ClassRepository.defaultDirectory) {
+    /// How a deleted class file is disposed of. The app moves it to the Trash; tests delete it outright.
+    let discardFile: @Sendable (URL) throws -> Void
+
+    init(
+        directory: URL = ClassRepository.defaultDirectory,
+        discardFile: @escaping @Sendable (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+    ) {
         self.directory = directory
+        self.discardFile = discardFile
     }
 
     struct LoadResult: Sendable {
@@ -40,6 +47,13 @@ struct ClassRepository: Sendable {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try Self.encoder.encode(schoolClass)
         try data.write(to: fileURL(for: schoolClass.id), options: [.atomic])
+    }
+
+    /// Moves the class file to the macOS Trash so a mistake can still be undone from Finder.
+    func moveToTrash(classID: UUID) throws {
+        let url = fileURL(for: classID)
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try discardFile(url)
     }
 
     func fileURL(for classID: UUID) -> URL {

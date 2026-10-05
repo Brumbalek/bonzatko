@@ -7,6 +7,8 @@ struct SchoolClass: Identifiable, Codable, Hashable, Sendable {
     /// Short form used in export file names, e.g. "UDM".
     var abbreviation: String
     var createdAt: Date
+    /// Set when the class is archived; archived classes are read-only.
+    var archivedAt: Date?
     var students: [Student]
     var lessons: [Lesson]
 
@@ -15,6 +17,7 @@ struct SchoolClass: Identifiable, Codable, Hashable, Sendable {
         name: String,
         abbreviation: String? = nil,
         createdAt: Date = .now,
+        archivedAt: Date? = nil,
         students: [Student] = [],
         lessons: [Lesson] = []
     ) {
@@ -22,10 +25,12 @@ struct SchoolClass: Identifiable, Codable, Hashable, Sendable {
         self.name = name
         self.abbreviation = abbreviation ?? Abbreviation.make(from: name)
         self.createdAt = createdAt
+        self.archivedAt = archivedAt
         self.students = students
         self.lessons = lessons
     }
 
+    var isArchived: Bool { archivedAt != nil }
     var activeStudents: [Student] { students.filter(\.isActive) }
     var removedStudents: [Student] { students.filter { !$0.isActive } }
 

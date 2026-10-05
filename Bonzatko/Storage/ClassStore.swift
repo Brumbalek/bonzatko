@@ -48,6 +48,24 @@ final class ClassStore {
         classes = Names.sortedCzech(classes, by: \.name)
     }
 
+    func archiveClass(_ id: UUID) {
+        update(id, allowArchived: true) { $0.archivedAt = .now }
+    }
+
+    func unarchiveClass(_ id: UUID) {
+        update(id, allowArchived: true) { $0.archivedAt = nil }
+    }
+
+    func deleteClass(_ id: UUID) {
+        guard let schoolClass = schoolClass(id) else { return }
+        do {
+            try repository.moveToTrash(classID: id)
+            classes.removeAll { $0.id == id }
+        } catch {
+            errorMessage = "Třídu „\(schoolClass.name)“ se nepodařilo smazat: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: Students
 
     /// Adds names exactly as given (already resolved for duplicates).
@@ -86,8 +104,10 @@ final class ClassStore {
 
     // MARK: Persistence
 
-    private func update(_ classID: UUID, _ change: (inout SchoolClass) -> Void) {
-        guard let index = classes.firstIndex(where: { $0.id == classID }) else { return }
+    /// Applies a change and saves it. Archived classes are read-only unless `allowArchived` is set.
+    private func update(_ classID: UUID, allowArchived: Bool = false, _ change: (inout SchoolClass) -> Void) {
+        guard let index = classes.firstIndex(where: { $0.id == classID }),
+              allowArchived || !classes[index].isArchived else { return }
         change(&classes[index])
         persist(classes[index])
     }

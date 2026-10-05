@@ -3,6 +3,7 @@ import SwiftUI
 /// Student list of one class: add, rename, remove, restore and import.
 struct ClassDetailView: View {
     let classID: UUID
+    let onDelete: () -> Void
 
     @Environment(ClassStore.self) private var store
 
@@ -40,6 +41,12 @@ struct ClassDetailView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 12)
 
+            if schoolClass.isArchived {
+                archivedBanner
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+            }
+
             HStack {
                 TextField("Přidat studenta", text: $newName, prompt: Text("Napište jméno a stiskněte Enter"))
                     .textFieldStyle(.roundedBorder)
@@ -48,6 +55,7 @@ struct ClassDetailView: View {
                 Button("Přidat") { addTypedName(schoolClass) }
                     .disabled(Names.clean(newName).isEmpty)
             }
+            .disabled(schoolClass.isArchived)
             .padding(.horizontal, 20)
             .padding(.bottom, 8)
 
@@ -75,6 +83,7 @@ struct ClassDetailView: View {
                                     Button("Vrátit") {
                                         store.restoreStudent(student.id, in: classID)
                                     }
+                                    .disabled(schoolClass.isArchived)
                                     .help("Vrátit studenta do třídy i s celou historií")
                                 }
                             }
@@ -89,17 +98,18 @@ struct ClassDetailView: View {
                 Button("Odebrat vybrané", systemImage: "person.badge.minus") {
                     isConfirmingRemoval = true
                 }
-                .disabled(checkedIDs.isEmpty)
+                .disabled(checkedIDs.isEmpty || schoolClass.isArchived)
                 .help("Odebrat zaškrtnuté studenty")
 
                 Button("Importovat…", systemImage: "square.and.arrow.down") {
                     isImporting = true
                 }
+                .disabled(schoolClass.isArchived)
                 .help("Hromadně přidat studenty z textu nebo souboru")
             }
         }
         .navigationTitle(schoolClass.name)
-        .onAppear { isAddFieldFocused = true }
+        .onAppear { isAddFieldFocused = !schoolClass.isArchived }
         .confirmationDialog(removalTitle(active), isPresented: $isConfirmingRemoval) {
             Button("Odebrat", role: .destructive) {
                 store.removeStudents(checkedIDs, from: classID)
@@ -144,8 +154,37 @@ struct ClassDetailView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Button("Upravit třídu…") { isEditingClass = true }
+            if !schoolClass.isArchived {
+                Button("Upravit třídu…") { isEditingClass = true }
+            }
+            Menu("Další akce", systemImage: "ellipsis.circle") {
+                if schoolClass.isArchived {
+                    Button("Obnovit z archivu", systemImage: "tray.and.arrow.up") {
+                        store.unarchiveClass(classID)
+                    }
+                } else {
+                    Button("Archivovat", systemImage: "archivebox") {
+                        store.archiveClass(classID)
+                    }
+                }
+                Divider()
+                Button("Smazat třídu…", systemImage: "trash", role: .destructive, action: onDelete)
+            }
+            .menuStyle(.button)
+            .labelStyle(.iconOnly)
+            .fixedSize()
+            .help("Archivovat nebo smazat třídu")
         }
+    }
+
+    private var archivedBanner: some View {
+        HStack {
+            Label("Třída je archivovaná. Nelze v ní nic měnit ani losovat.", systemImage: "archivebox")
+            Spacer()
+            Button("Obnovit z archivu") { store.unarchiveClass(classID) }
+        }
+        .padding(10)
+        .background(.yellow.opacity(0.15), in: .rect(cornerRadius: 8))
     }
 
     @ViewBuilder
@@ -161,6 +200,7 @@ struct ClassDetailView: View {
             }
             .toggleStyle(.checkbox)
             .labelsHidden()
+            .disabled(schoolClass.isArchived)
 
             if renamingID == student.id {
                 TextField("Jméno", text: $renameText)
@@ -175,7 +215,9 @@ struct ClassDetailView: View {
                 Text(student.name)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
-                    .onTapGesture(count: 2) { startRename(student) }
+                    .onTapGesture(count: 2) {
+                        if !schoolClass.isArchived { startRename(student) }
+                    }
                     .help("Dvojklikem přejmenujete")
             }
         }

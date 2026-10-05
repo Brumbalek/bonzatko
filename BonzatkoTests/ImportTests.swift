@@ -132,7 +132,48 @@ struct ImportPlannerTests {
 struct ClassStoreTests {
     private func makeStore() -> (ClassStore, URL) {
         let directory = FileManager.default.temporaryDirectory.appending(path: "BonzatkoTests-\(UUID())")
-        return (ClassStore(repository: ClassRepository(directory: directory)), directory)
+        return (ClassStore(repository: Self.repository(directory)), directory)
+    }
+
+    private static func repository(_ directory: URL) -> ClassRepository {
+        ClassRepository(directory: directory) { try FileManager.default.removeItem(at: $0) }
+    }
+
+    @Test func archivedClassIsReadOnlyUntilRestored() throws {
+        let (store, directory) = makeStore()
+        let classID = store.createClass(name: "Účetnictví", abbreviation: "UCT")
+        store.addStudents(["Jan Novák"], to: classID)
+        store.archiveClass(classID)
+
+        store.addStudents(["Eva Dvořáková"], to: classID)
+        store.updateClass(classID, name: "Jiný název", abbreviation: "JN")
+        #expect(store.schoolClass(classID)?.students.count == 1)
+        #expect(store.schoolClass(classID)?.name == "Účetnictví")
+
+        let reloaded = ClassStore(repository: Self.repository(directory))
+        #expect(reloaded.schoolClass(classID)?.isArchived == true)
+        reloaded.unarchiveClass(classID)
+        reloaded.addStudents(["Eva Dvořáková"], to: classID)
+        #expect(reloaded.schoolClass(classID)?.students.count == 2)
+    }
+
+    @Test func deletedClassIsGoneAfterReload() {
+        let (store, directory) = makeStore()
+        let keep = store.createClass(name: "Marketing", abbreviation: "Marketing")
+        let delete = store.createClass(name: "Účetnictví", abbreviation: "UCT")
+        store.deleteClass(delete)
+        #expect(store.schoolClass(delete) == nil)
+
+        let reloaded = ClassStore(repository: Self.repository(directory))
+        #expect(reloaded.classes.map(\.id) == [keep])
+    }
+
+    @Test func decodesClassFilesSavedBeforeArchiving() throws {
+        let json = #"{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Marketing","abbreviation":"Marketing","createdAt":"2026-10-05T10:00:00Z","students":[],"lessons":[]}"#
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let schoolClass = try decoder.decode(SchoolClass.self, from: Data(json.utf8))
+        #expect(!schoolClass.isArchived)
     }
 
     @Test func persistsEveryChangeAndReloads() throws {
@@ -143,7 +184,7 @@ struct ClassStoreTests {
         store.renameStudent(jan.id, to: "Jan  Novák ml.", in: classID)
         store.removeStudents([jan.id], from: classID)
 
-        let reloaded = ClassStore(repository: ClassRepository(directory: directory))
+        let reloaded = ClassStore(repository: Self.repository(directory))
         let schoolClass = try #require(reloaded.schoolClass(classID))
         #expect(schoolClass.name == "Úvod do marketingu")
         #expect(schoolClass.activeStudents.map(\.name) == ["Eva Dvořáková"])
