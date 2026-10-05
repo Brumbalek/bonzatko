@@ -95,3 +95,51 @@ struct LessonStoreTests {
         #expect(store.schoolClass(classID)?.lessons.isEmpty == true)
     }
 }
+
+@MainActor
+struct LessonClosingTests {
+    private func makeStore() -> (ClassStore, UUID) {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "BonzatkoTests-\(UUID())")
+        let store = ClassStore(repository: ClassRepository(directory: directory) { try FileManager.default.removeItem(at: $0) })
+        let classID = store.createClass(name: "Účetnictví", abbreviation: "UCT")
+        store.addStudents(["Adam", "Bára"], to: classID)
+        return (store, classID)
+    }
+
+    @Test func closedLastLessonBlocksDrawingUntilReopened() throws {
+        let (store, classID) = makeStore()
+        let lessonID = try #require(store.createLesson(in: classID))
+        store.closeLastLesson(in: classID)
+        #expect(store.schoolClass(classID)?.isOpen(lessonID) == false)
+        #expect(store.drawNext(in: classID) == .notAllowed)
+        #expect(store.renameLesson(lessonID, to: "Jiná", in: classID) != nil)
+
+        store.reopenLastLesson(in: classID)
+        #expect(store.schoolClass(classID)?.isOpen(lessonID) == true)
+        if case .drawn = store.drawNext(in: classID) {} else { Issue.record("Expected a draw") }
+    }
+
+    @Test func undoAndCorrectionsAreIgnoredInClosedLesson() throws {
+        let (store, classID) = makeStore()
+        store.createLesson(in: classID)
+        _ = store.drawNext(in: classID)
+        store.recordResult(.present, in: classID)
+        store.closeLastLesson(in: classID)
+
+        store.undoLastStep(in: classID)
+        let draw = try #require(store.schoolClass(classID)?.lastLesson?.draws.first)
+        store.correctResult(of: draw.id, to: .absent, in: classID)
+        #expect(store.schoolClass(classID)?.lastLesson?.draws.map(\.result) == [.present])
+    }
+
+    @Test func olderLessonCannotBeReopenedAfterNewOne() throws {
+        let (store, classID) = makeStore()
+        let first = try #require(store.createLesson(in: classID))
+        store.closeLastLesson(in: classID)
+        let second = try #require(store.createLesson(in: classID))
+        store.reopenLastLesson(in: classID)
+        let schoolClass = try #require(store.schoolClass(classID))
+        #expect(!schoolClass.isOpen(first))
+        #expect(schoolClass.isOpen(second))
+    }
+}

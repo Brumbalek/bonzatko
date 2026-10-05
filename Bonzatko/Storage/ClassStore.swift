@@ -93,10 +93,28 @@ final class ClassStore {
         return nil
     }
 
+    /// Closes the last lesson by hand. It can be reopened as long as no newer lesson exists.
+    func closeLastLesson(in classID: UUID) {
+        update(classID) { schoolClass in
+            guard !schoolClass.lessons.isEmpty else { return }
+            schoolClass.lessons[schoolClass.lessons.count - 1].closedAt = .now
+        }
+    }
+
+    func reopenLastLesson(in classID: UUID) {
+        update(classID) { schoolClass in
+            guard !schoolClass.lessons.isEmpty else { return }
+            schoolClass.lessons[schoolClass.lessons.count - 1].closedAt = nil
+        }
+    }
+
     /// Deletes the last lesson; the one before becomes the last and can be continued again.
     func deleteLastLesson(in classID: UUID) {
         update(classID) { schoolClass in
             _ = schoolClass.lessons.popLast()
+            if !schoolClass.lessons.isEmpty {
+                schoolClass.lessons[schoolClass.lessons.count - 1].closedAt = nil
+            }
         }
     }
 
@@ -119,7 +137,8 @@ final class ClassStore {
     }
 
     func drawNext<R: RandomNumberGenerator>(in classID: UUID, using generator: inout R) -> DrawOutcome {
-        guard let schoolClass = schoolClass(classID), !schoolClass.isArchived, let lesson = schoolClass.lastLesson else {
+        guard let schoolClass = schoolClass(classID), !schoolClass.isArchived, let lesson = schoolClass.lastLesson,
+              schoolClass.isOpen(lesson.id) else {
             return .notAllowed
         }
         if lesson.draws.last?.result == .pending {
@@ -134,7 +153,7 @@ final class ClassStore {
 
     /// Records the arrow-key decision for the pending name.
     func recordResult(_ result: DrawResult, in classID: UUID) {
-        update(classID) { schoolClass in
+        updateOpenLesson(classID) { schoolClass in
             let lessonIndex = schoolClass.lessons.count - 1
             guard lessonIndex >= 0, schoolClass.lessons[lessonIndex].draws.last?.result == .pending else { return }
             let drawIndex = schoolClass.lessons[lessonIndex].draws.count - 1
@@ -144,7 +163,7 @@ final class ClassStore {
 
     /// Undoes the last step: a decided name becomes pending again; a pending name goes back to the pool.
     func undoLastStep(in classID: UUID) {
-        update(classID) { schoolClass in
+        updateOpenLesson(classID) { schoolClass in
             let lessonIndex = schoolClass.lessons.count - 1
             guard lessonIndex >= 0, let last = schoolClass.lessons[lessonIndex].draws.last else { return }
             let drawIndex = schoolClass.lessons[lessonIndex].draws.count - 1
@@ -158,7 +177,7 @@ final class ClassStore {
 
     /// Changes any result of the open lesson from the "Opravit výsledky" panel.
     func correctResult(of drawID: UUID, to result: DrawResult, in classID: UUID) {
-        update(classID) { schoolClass in
+        updateOpenLesson(classID) { schoolClass in
             let lessonIndex = schoolClass.lessons.count - 1
             guard lessonIndex >= 0,
                   let drawIndex = schoolClass.lessons[lessonIndex].draws.firstIndex(where: { $0.id == drawID }) else { return }
@@ -210,6 +229,12 @@ final class ClassStore {
               allowArchived || !classes[index].isArchived else { return }
         change(&classes[index])
         persist(classes[index])
+    }
+
+    /// Like `update`, but only while the last lesson is open.
+    private func updateOpenLesson(_ classID: UUID, _ change: (inout SchoolClass) -> Void) {
+        guard let lesson = schoolClass(classID)?.lastLesson, schoolClass(classID)?.isOpen(lesson.id) == true else { return }
+        update(classID, change)
     }
 
     private func persist(_ schoolClass: SchoolClass) {

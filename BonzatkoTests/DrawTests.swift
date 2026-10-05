@@ -74,13 +74,15 @@ struct DrawEngineTests {
         #expect(DrawEngine.pick(from: [], using: &generator) == nil)
     }
 
-    @Test func animationSlowsDownAndEndsOnTime() {
-        let times = DrawEngine.tickTimes(duration: 2)
-        #expect(times.count == 28)
-        #expect(abs(times.last! - 2) < 0.000_1)
-        let gaps = zip(times.dropFirst(), times).map { $0 - $1 }
-        #expect(gaps.first! < 0.05)
-        #expect(zip(gaps.dropFirst(), gaps).allSatisfy { $0 >= $1 })
+    @Test(arguments: [0.5, 1.0, 2.0, 3.5, 6.0])
+    func animationSlowsDownAndEndsOnTime(duration: Double) {
+        let times = DrawEngine.tickTimes(duration: duration)
+        #expect(abs(times.last! - duration) < 0.000_1)
+        let gaps = [times[0]] + zip(times.dropFirst(), times).map { $0 - $1 }
+        #expect(gaps.first! < 0.06)
+        #expect(zip(gaps.dropFirst(), gaps).allSatisfy { $0 >= $1 - 0.000_1 })
+        // The second-to-last name must not linger: the last gap stays short.
+        #expect(gaps.last! <= 0.23)
     }
 
     @Test func spinSequenceEndsOnWinnerWithoutRepeats() {

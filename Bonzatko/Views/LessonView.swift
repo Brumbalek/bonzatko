@@ -19,7 +19,8 @@ struct LessonView: View {
 
     var body: some View {
         if let schoolClass = store.schoolClass(ref.classID),
-           let lesson = schoolClass.lessons.first(where: { $0.id == ref.lessonID }) {
+           let lesson = schoolClass.lessons.first(where: { $0.id == ref.lessonID }),
+           schoolClass.isOpen(lesson.id) {
             content(schoolClass, lesson)
                 .onAppear { keyMonitor.start(handleKey) }
                 .onDisappear {
@@ -27,7 +28,7 @@ struct LessonView: View {
                     spinTask?.cancel()
                 }
         } else {
-            ContentUnavailableView("Hodina neexistuje", systemImage: "questionmark.circle")
+            ContentUnavailableView("Hodina je uzavřená", systemImage: "lock")
                 .onAppear { navigator.openLesson = nil }
         }
     }
@@ -65,6 +66,14 @@ struct LessonView: View {
                 .controlSize(.large)
                 .help("Přejmenovat Hodinu")
             Spacer()
+            Button("Uzavřít Hodinu", systemImage: "lock") {
+                spinTask?.cancel()
+                store.closeLastLesson(in: ref.classID)
+                navigator.openLesson = nil
+            }
+            .controlSize(.large)
+            .disabled(isSpinning)
+            .help("Uzavřít Hodinu. Dokud nezaložíte novou, půjde znovu otevřít.")
             Toggle(isOn: $showsCorrections) {
                 Label("Opravit výsledky", systemImage: "list.bullet.clipboard")
             }
@@ -246,17 +255,23 @@ private struct CorrectionPanel: View {
                 }
                 ForEach(Array(lesson.draws.enumerated()), id: \.element.id) { index, draw in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(index + 1). \(schoolClass.student(draw.studentID)?.name ?? "Neznámý student")")
-                        Picker("Stav", selection: Binding(
-                            get: { draw.result },
-                            set: { store.correctResult(of: draw.id, to: $0, in: classID) }
-                        )) {
-                            Text("přítomen").tag(DrawResult.present)
-                            Text("nepřítomen").tag(DrawResult.absent)
-                            Text("nezaznamenáno").tag(DrawResult.skipped)
+                        HStack {
+                            Text("\(index + 1). \(schoolClass.student(draw.studentID)?.name ?? "Neznámý student")")
                             if draw.result == .pending {
-                                Text("čeká").tag(DrawResult.pending)
+                                Spacer()
+                                Text("čeká na šipku")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
+                        }
+                        // Always the same three segments; a name waiting for an arrow shows none selected.
+                        Picker("Stav", selection: Binding<DrawResult?>(
+                            get: { draw.result == .pending ? nil : draw.result },
+                            set: { if let result = $0 { store.correctResult(of: draw.id, to: result, in: classID) } }
+                        )) {
+                            Text("přítomen").tag(DrawResult?.some(.present))
+                            Text("nepřítomen").tag(DrawResult?.some(.absent))
+                            Text("nezaznamenáno").tag(DrawResult?.some(.skipped))
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()

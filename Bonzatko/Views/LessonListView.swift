@@ -3,6 +3,7 @@ import SwiftUI
 /// All lessons of a class, newest first. Only the last one is open.
 struct LessonListView: View {
     let schoolClass: SchoolClass
+    @Environment(ClassStore.self) private var store
     @Environment(Navigator.self) private var navigator
 
     var body: some View {
@@ -21,7 +22,7 @@ struct LessonListView: View {
     private func row(_ lesson: Lesson) -> some View {
         let ref = LessonRef(classID: schoolClass.id, lessonID: lesson.id)
         let isOpen = schoolClass.isOpen(lesson.id)
-        let editable = isOpen && !schoolClass.isArchived
+        let isLast = schoolClass.isLast(lesson.id) && !schoolClass.isArchived
 
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
@@ -34,17 +35,25 @@ struct LessonListView: View {
             Spacer()
             LessonStatusBadge(isOpen: isOpen)
 
-            if editable {
+            if isOpen && isLast {
                 Button("Pokračovat") { navigator.openLesson = ref }
+            } else {
+                Button("Prohlédnout") { navigator.browsedLesson = ref }
+            }
+            if isLast {
                 Menu("Další akce", systemImage: "ellipsis.circle") {
-                    Button("Přejmenovat…", systemImage: "pencil") { navigator.lessonRenameRequest = ref }
+                    if isOpen {
+                        Button("Přejmenovat…", systemImage: "pencil") { navigator.lessonRenameRequest = ref }
+                        Button("Uzavřít Hodinu", systemImage: "lock") { store.closeLastLesson(in: schoolClass.id) }
+                    } else {
+                        Button("Znovu otevřít", systemImage: "lock.open") { store.reopenLastLesson(in: schoolClass.id) }
+                    }
+                    Divider()
                     Button("Smazat…", systemImage: "trash", role: .destructive) { navigator.lessonDeletionRequest = ref }
                 }
                 .menuStyle(.button)
                 .labelStyle(.iconOnly)
                 .fixedSize()
-            } else {
-                Button("Prohlédnout") { navigator.browsedLesson = ref }
             }
         }
         .padding(.vertical, 2)

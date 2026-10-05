@@ -29,12 +29,27 @@ enum DrawEngine {
     }
 
     /// Moments (seconds from start) at which the spinning name changes: fast at first, slowing to a stop.
+    /// Gaps grow geometrically but never beyond `maxGap`, so the second-to-last name does not linger.
     /// The last moment equals `duration` and shows the winner.
-    static func tickTimes(duration: Double, ticksPerSecond: Double = 14) -> [Double] {
-        let count = max(Int(duration * ticksPerSecond), 1)
-        return (1...count).map { k in
-            // Inverse of an ease-out curve (1 - (1 - x)^3): equal steps in progress, growing gaps in time.
-            duration * (1 - pow(1 - Double(k) / Double(count), 1.0 / 3.0))
+    static func tickTimes(duration: Double, firstGap: Double = 0.04, maxGap: Double = 0.2) -> [Double] {
+        guard duration > 0 else { return [0] }
+        let last = min(maxGap, duration * 0.15)
+        let first = min(firstGap, last / 2)
+
+        // Pick the number of gaps whose geometric series (first … last) best fills the duration.
+        func gaps(_ count: Int) -> [Double] {
+            guard count > 1 else { return [first] }
+            let ratio = pow(last / first, 1 / Double(count - 1))
+            return (0..<count).map { first * pow(ratio, Double($0)) }
+        }
+        let count = (1...400).min { abs(gaps($0).reduce(0, +) - duration) < abs(gaps($1).reduce(0, +) - duration) } ?? 1
+        let chosen = gaps(count)
+        let scale = duration / chosen.reduce(0, +)
+
+        var time = 0.0
+        return chosen.map { gap in
+            time += gap * scale
+            return time
         }
     }
 

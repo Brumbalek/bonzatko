@@ -44,7 +44,7 @@ struct ContentView: View {
             Button("Založit novou Hodinu") { startNewLesson(schoolClass.id) }
         } message: { schoolClass in
             if let last = schoolClass.lastLesson {
-                Text("Hodina „\(last.name)“ se tím definitivně uzavře. Půjde už jen prohlížet.")
+                Text("Hodina „\(last.name)“ se tím definitivně uzavře a už ji nepůjde znovu otevřít, jen prohlížet.")
             }
         }
         .confirmationDialog(

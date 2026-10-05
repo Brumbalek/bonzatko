@@ -63,19 +63,31 @@ private struct ClassCard: View {
             Spacer(minLength: 4)
 
             HStack {
-                Button("Pokračovat v poslední Hodině") {
-                    if let last = schoolClass.lastLesson {
-                        navigator.openLesson = LessonRef(classID: schoolClass.id, lessonID: last.id)
-                    }
-                }
-                .disabled(schoolClass.lastLesson == nil)
-
+                ContinueLessonButton(schoolClass: schoolClass)
                 NewLessonButton(schoolClass: schoolClass)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
         .background(.background.secondary, in: .rect(cornerRadius: 12))
+    }
+}
+
+/// "Pokračovat v poslední Hodině" – reopens the last lesson if it was closed by hand.
+struct ContinueLessonButton: View {
+    let schoolClass: SchoolClass
+    @Environment(ClassStore.self) private var store
+    @Environment(Navigator.self) private var navigator
+
+    var body: some View {
+        Button("Pokračovat v poslední Hodině") {
+            guard let last = schoolClass.lastLesson else { return }
+            if !schoolClass.isOpen(last.id) {
+                store.reopenLastLesson(in: schoolClass.id)
+            }
+            navigator.openLesson = LessonRef(classID: schoolClass.id, lessonID: last.id)
+        }
+        .disabled(schoolClass.lastLesson == nil || schoolClass.isArchived)
     }
 }
 

@@ -28,13 +28,22 @@ enum DrawKey: Equatable {
 
 /// Listens to key presses in the main window while the drawing screen is shown.
 /// A local monitor works regardless of which control has focus, so keys work right after the app is activated.
+///
+/// SwiftUI may call `onAppear` of a rebuilt view before `onDisappear` of the old one (e.g. when the
+/// "Opravit výsledky" panel is toggled), so starts and stops are counted instead of simply replacing each other.
 @MainActor
 final class KeyMonitor {
     private var token: Any?
+    private var activeCount = 0
+    private var handler: (@MainActor (DrawKey, NSWindow?) -> Bool)?
+
+    var isActive: Bool { token != nil }
 
     func start(_ handler: @escaping @MainActor (DrawKey, NSWindow?) -> Bool) {
-        stop()
-        token = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+        self.handler = handler
+        activeCount += 1
+        guard token == nil else { return }
+        token = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             // Leave keys alone while a sheet (e.g. renaming) is open or a text field is being edited.
             guard let key = DrawKey(event: event) else { return event }
             let windowNumber = event.windowNumber
@@ -43,16 +52,17 @@ final class KeyMonitor {
                       !(window.firstResponder is NSTextView) else {
                     return false
                 }
-                return handler(key, window)
+                return self?.handler?(key, window) ?? false
             }
             return consumed ? nil : event
         }
     }
 
     func stop() {
-        if let token {
-            NSEvent.removeMonitor(token)
-        }
-        token = nil
+        activeCount = max(activeCount - 1, 0)
+        guard activeCount == 0, let token else { return }
+        NSEvent.removeMonitor(token)
+        self.token = nil
+        handler = nil
     }
 }

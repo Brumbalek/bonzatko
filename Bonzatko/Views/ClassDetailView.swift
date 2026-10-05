@@ -60,12 +60,7 @@ struct ClassDetailView: View {
                 .labelsHidden()
                 .fixedSize()
                 Spacer()
-                Button("Pokračovat v poslední Hodině") {
-                    if let last = schoolClass.lastLesson {
-                        navigator.openLesson = LessonRef(classID: classID, lessonID: last.id)
-                    }
-                }
-                .disabled(schoolClass.lastLesson == nil || schoolClass.isArchived)
+                ContinueLessonButton(schoolClass: schoolClass)
                 NewLessonButton(schoolClass: schoolClass)
             }
             .padding(.horizontal, 20)

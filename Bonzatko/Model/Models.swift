@@ -33,8 +33,14 @@ struct SchoolClass: Identifiable, Codable, Hashable, Sendable {
     var isArchived: Bool { archivedAt != nil }
     var lastLesson: Lesson? { lessons.last }
 
-    /// Only the last lesson can be continued, renamed or deleted.
+    /// Drawing, renaming and corrections are possible only in an open lesson: the last one, not closed by hand.
     func isOpen(_ lessonID: UUID) -> Bool {
+        guard let lastLesson else { return false }
+        return lastLesson.id == lessonID && lastLesson.closedAt == nil
+    }
+
+    /// Only the last lesson can be deleted or reopened.
+    func isLast(_ lessonID: UUID) -> Bool {
         lastLesson?.id == lessonID
     }
 
@@ -74,11 +80,14 @@ struct Student: Identifiable, Codable, Hashable, Sendable {
 }
 
 /// One meeting of a class ("Hodina").
-/// Only the last lesson of a class is open; all earlier ones are closed for good.
+/// Only the last lesson of a class can be open; all earlier ones are closed for good.
+/// The last lesson can also be closed by hand and reopened later.
 struct Lesson: Identifiable, Codable, Hashable, Sendable {
     var id: UUID
     var name: String
     var createdAt: Date
+    /// Set when the last lesson was closed by hand.
+    var closedAt: Date?
     /// Path of the last Excel export of this lesson.
     var exportPath: String?
     var draws: [Draw]
