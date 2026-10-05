@@ -100,6 +100,72 @@ final class ClassStore {
         }
     }
 
+    // MARK: Drawing
+
+    enum DrawOutcome: Equatable {
+        case drawn(Student)
+        /// The previous name still waits for an arrow key.
+        case needsResult
+        /// Everybody active has been drawn in this lesson.
+        case poolEmpty
+        /// The lesson is closed or the class archived.
+        case notAllowed
+    }
+
+    /// Draws the next student into the open lesson and saves it right away (as pending).
+    func drawNext(in classID: UUID) -> DrawOutcome {
+        var generator = SystemRandomNumberGenerator()
+        return drawNext(in: classID, using: &generator)
+    }
+
+    func drawNext<R: RandomNumberGenerator>(in classID: UUID, using generator: inout R) -> DrawOutcome {
+        guard let schoolClass = schoolClass(classID), !schoolClass.isArchived, let lesson = schoolClass.lastLesson else {
+            return .notAllowed
+        }
+        if lesson.draws.last?.result == .pending {
+            return .needsResult
+        }
+        guard let student = DrawEngine.pick(from: DrawEngine.weightedPool(for: schoolClass, lesson: lesson), using: &generator) else {
+            return .poolEmpty
+        }
+        update(classID) { $0.lessons[$0.lessons.count - 1].draws.append(Draw(studentID: student.id)) }
+        return .drawn(student)
+    }
+
+    /// Records the arrow-key decision for the pending name.
+    func recordResult(_ result: DrawResult, in classID: UUID) {
+        update(classID) { schoolClass in
+            let lessonIndex = schoolClass.lessons.count - 1
+            guard lessonIndex >= 0, schoolClass.lessons[lessonIndex].draws.last?.result == .pending else { return }
+            let drawIndex = schoolClass.lessons[lessonIndex].draws.count - 1
+            schoolClass.lessons[lessonIndex].draws[drawIndex].result = result
+        }
+    }
+
+    /// Undoes the last step: a decided name becomes pending again; a pending name goes back to the pool.
+    func undoLastStep(in classID: UUID) {
+        update(classID) { schoolClass in
+            let lessonIndex = schoolClass.lessons.count - 1
+            guard lessonIndex >= 0, let last = schoolClass.lessons[lessonIndex].draws.last else { return }
+            let drawIndex = schoolClass.lessons[lessonIndex].draws.count - 1
+            if last.result == .pending {
+                schoolClass.lessons[lessonIndex].draws.removeLast()
+            } else {
+                schoolClass.lessons[lessonIndex].draws[drawIndex].result = .pending
+            }
+        }
+    }
+
+    /// Changes any result of the open lesson from the "Opravit výsledky" panel.
+    func correctResult(of drawID: UUID, to result: DrawResult, in classID: UUID) {
+        update(classID) { schoolClass in
+            let lessonIndex = schoolClass.lessons.count - 1
+            guard lessonIndex >= 0,
+                  let drawIndex = schoolClass.lessons[lessonIndex].draws.firstIndex(where: { $0.id == drawID }) else { return }
+            schoolClass.lessons[lessonIndex].draws[drawIndex].result = result
+        }
+    }
+
     // MARK: Students
 
     /// Adds names exactly as given (already resolved for duplicates).
