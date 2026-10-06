@@ -13,6 +13,9 @@ packages:
   ZIPFoundation:
     url: https://github.com/weichsel/ZIPFoundation.git
     exactVersion: 0.9.20
+  libxlsxwriter:
+    url: https://github.com/jmcnamara/libxlsxwriter.git
+    exactVersion: 1.2.4
 
 settings:
   base:
@@ -32,6 +35,7 @@ targets:
     dependencies:
       - package: CoreXLSX
       - package: ZIPFoundation
+      - package: libxlsxwriter
     info:
       path: Bonzatko/Info.plist
       properties:

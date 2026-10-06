@@ -5,6 +5,7 @@ struct LessonView: View {
     let ref: LessonRef
     @Environment(ClassStore.self) private var store
     @Environment(Navigator.self) private var navigator
+    @Environment(SyncFlow.self) private var flow
     @AppStorage(SettingsKeys.animationDuration) private var animationDuration = SettingsKeys.defaultAnimationDuration
 
     @State private var keyMonitor = KeyMonitor()
@@ -68,12 +69,11 @@ struct LessonView: View {
             Spacer()
             Button("Uzavřít Hodinu", systemImage: "lock") {
                 spinTask?.cancel()
-                store.closeLastLesson(in: ref.classID)
-                navigator.openLesson = nil
+                flow.close(ref)
             }
             .controlSize(.large)
             .disabled(isSpinning)
-            .help("Uzavřít Hodinu. Dokud nezaložíte novou, půjde znovu otevřít.")
+            .help("Uzavřít Hodinu a uložit ji do Excelu. Dokud nezaložíte novou, půjde znovu otevřít.")
             Toggle(isOn: $showsCorrections) {
                 Label("Opravit výsledky", systemImage: "list.bullet.clipboard")
             }

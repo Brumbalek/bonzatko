@@ -2,14 +2,15 @@ import SwiftUI
 
 @main
 struct BonzatkoApp: App {
-    @State private var store = ClassStore()
-    @State private var navigator = Navigator()
+    @NSApplicationDelegateAdaptor private var appDelegate: AppDelegate
 
     var body: some Scene {
         Window("Bonzátko", id: "main") {
             ContentView()
-                .environment(store)
-                .environment(navigator)
+                .environment(appDelegate.store)
+                .environment(appDelegate.navigator)
+                .environment(appDelegate.exporter)
+                .environment(appDelegate.flow)
                 .frame(minWidth: 760, minHeight: 480)
         }
         .defaultSize(width: 1000, height: 680)

@@ -23,8 +23,6 @@ final class Navigator {
     /// A closed lesson shown read-only.
     var browsedLesson: LessonRef?
 
-    /// Set when the user asked for a new lesson; the window asks for confirmation first.
-    var newLessonRequest: UUID?
     var lessonDeletionRequest: LessonRef?
     var lessonRenameRequest: LessonRef?
 }

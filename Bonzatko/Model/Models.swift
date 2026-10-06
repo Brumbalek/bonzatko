@@ -82,13 +82,14 @@ struct Student: Identifiable, Codable, Hashable, Sendable {
 /// One meeting of a class ("Hodina").
 /// Only the last lesson of a class can be open; all earlier ones are closed for good.
 /// The last lesson can also be closed by hand and reopened later.
+/// Its Excel export exists only while it is closed (see `SyncFlow`).
 struct Lesson: Identifiable, Codable, Hashable, Sendable {
     var id: UUID
     var name: String
     var createdAt: Date
     /// Set when the last lesson was closed by hand.
     var closedAt: Date?
-    /// Path of the last Excel export of this lesson.
+    /// Path of the Excel export, set while the file exists.
     var exportPath: String?
     var draws: [Draw]
 
@@ -98,6 +99,10 @@ struct Lesson: Identifiable, Codable, Hashable, Sendable {
         self.createdAt = createdAt
         self.exportPath = exportPath
         self.draws = draws
+    }
+
+    func result(of studentID: UUID) -> DrawResult? {
+        draws.first { $0.studentID == studentID }?.result
     }
 }
 

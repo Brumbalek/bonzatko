@@ -73,19 +73,15 @@ private struct ClassCard: View {
     }
 }
 
-/// "Pokračovat v poslední Hodině" – reopens the last lesson if it was closed by hand.
+/// "Pokračovat v poslední Hodině" – reopens the last lesson if it is closed (reading edits from Excel).
 struct ContinueLessonButton: View {
     let schoolClass: SchoolClass
-    @Environment(ClassStore.self) private var store
-    @Environment(Navigator.self) private var navigator
+    @Environment(SyncFlow.self) private var flow
 
     var body: some View {
         Button("Pokračovat v poslední Hodině") {
             guard let last = schoolClass.lastLesson else { return }
-            if !schoolClass.isOpen(last.id) {
-                store.reopenLastLesson(in: schoolClass.id)
-            }
-            navigator.openLesson = LessonRef(classID: schoolClass.id, lessonID: last.id)
+            flow.reopen(LessonRef(classID: schoolClass.id, lessonID: last.id), thenShow: true)
         }
         .disabled(schoolClass.lastLesson == nil || schoolClass.isArchived)
     }
@@ -95,18 +91,11 @@ struct ContinueLessonButton: View {
 /// Asks for confirmation only when an earlier lesson would be closed.
 struct NewLessonButton: View {
     let schoolClass: SchoolClass
-    @Environment(ClassStore.self) private var store
-    @Environment(Navigator.self) private var navigator
+    @Environment(SyncFlow.self) private var flow
 
     var body: some View {
         Button("Nová Hodina") {
-            if schoolClass.lastLesson == nil {
-                if let lessonID = store.createLesson(in: schoolClass.id) {
-                    navigator.openLesson = LessonRef(classID: schoolClass.id, lessonID: lessonID)
-                }
-            } else {
-                navigator.newLessonRequest = schoolClass.id
-            }
+            flow.requestNewLesson(in: schoolClass.id)
         }
         .buttonStyle(.borderedProminent)
         .disabled(schoolClass.activeStudents.isEmpty || schoolClass.isArchived)

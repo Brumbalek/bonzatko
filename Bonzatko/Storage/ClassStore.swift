@@ -108,12 +108,12 @@ final class ClassStore {
         }
     }
 
-    /// Deletes the last lesson; the one before becomes the last and can be continued again.
+    /// Deletes the last lesson; the one before becomes the last one, closed, and can be reopened again.
     func deleteLastLesson(in classID: UUID) {
         update(classID) { schoolClass in
             _ = schoolClass.lessons.popLast()
-            if !schoolClass.lessons.isEmpty {
-                schoolClass.lessons[schoolClass.lessons.count - 1].closedAt = nil
+            if !schoolClass.lessons.isEmpty, schoolClass.lessons[schoolClass.lessons.count - 1].closedAt == nil {
+                schoolClass.lessons[schoolClass.lessons.count - 1].closedAt = .now
             }
         }
     }
@@ -185,6 +185,30 @@ final class ClassStore {
         }
     }
 
+    // MARK: Export bookkeeping
+
+    /// Remembers where the lesson's export file is (`nil` once it was removed).
+    func setExportPath(_ path: String?, of ref: LessonRef) {
+        update(ref.classID, allowArchived: true) { schoolClass in
+            guard let index = schoolClass.lessons.firstIndex(where: { $0.id == ref.lessonID }) else { return }
+            schoolClass.lessons[index].exportPath = path
+        }
+    }
+
+    /// Takes over statuses edited in Excel into the last lesson (even if it was closed by hand).
+    func applySyncChanges(_ changes: [SyncChange], to ref: LessonRef) {
+        update(ref.classID, allowArchived: true) { schoolClass in
+            guard let lessonIndex = schoolClass.lessons.firstIndex(where: { $0.id == ref.lessonID }) else { return }
+            for change in changes {
+                if let drawIndex = schoolClass.lessons[lessonIndex].draws.firstIndex(where: { $0.studentID == change.studentID }) {
+                    schoolClass.lessons[lessonIndex].draws[drawIndex].result = change.newStatus.drawResult
+                } else if change.newStatus != .empty {
+                    schoolClass.lessons[lessonIndex].draws.append(Draw(studentID: change.studentID, result: change.newStatus.drawResult))
+                }
+            }
+        }
+    }
+
     // MARK: Students
 
     /// Adds names exactly as given (already resolved for duplicates).
@@ -227,7 +251,9 @@ final class ClassStore {
     private func update(_ classID: UUID, allowArchived: Bool = false, _ change: (inout SchoolClass) -> Void) {
         guard let index = classes.firstIndex(where: { $0.id == classID }),
               allowArchived || !classes[index].isArchived else { return }
+        let before = classes[index]
         change(&classes[index])
+        guard classes[index] != before else { return }
         persist(classes[index])
     }
 

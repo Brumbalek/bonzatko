@@ -76,7 +76,7 @@ struct LessonStoreTests {
         #expect(store.schoolClass(classID)?.lastLesson?.name == "Opakování před testem")
     }
 
-    @Test func deletingTheLastLessonReopensThePreviousOne() throws {
+    @Test func deletingTheLastLessonMakesThePreviousOneLastAndReopenable() throws {
         let (store, directory, classID) = makeStore()
         let first = try #require(store.createLesson(in: classID))
         _ = try #require(store.createLesson(in: classID))
@@ -85,7 +85,10 @@ struct LessonStoreTests {
         let reloaded = ClassStore(repository: ClassRepository(directory: directory))
         let schoolClass = try #require(reloaded.schoolClass(classID))
         #expect(schoolClass.lessons.map(\.id) == [first])
-        #expect(schoolClass.isOpen(first))
+        #expect(schoolClass.isLast(first))
+        #expect(!schoolClass.isOpen(first)) // closed; reopening goes through SyncFlow (reads Excel first)
+        reloaded.reopenLastLesson(in: classID)
+        #expect(reloaded.schoolClass(classID)?.isOpen(first) == true)
     }
 
     @Test func archivedClassCannotStartLessons() {

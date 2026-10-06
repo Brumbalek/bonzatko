@@ -3,6 +3,8 @@ import SwiftUI
 struct ContentView: View {
     @Environment(ClassStore.self) private var store
     @Environment(Navigator.self) private var navigator
+    @Environment(ExportCenter.self) private var exporter
+    @Environment(SyncFlow.self) private var flow
     @State private var isCreatingClass = false
     @State private var showsArchive = false
     @State private var classPendingDeletion: SchoolClass?
@@ -36,25 +38,27 @@ struct ContentView: View {
         } message: { _ in
             Text("Třída se všemi studenty a historií se přesune do Koše. Exporty v Excelu zůstanou beze změny. Pokud chcete třídu jen schovat, použijte raději Archivovat.")
         }
-        .confirmationDialog(
-            "Založit novou Hodinu?",
-            isPresented: isPresent($navigator.newLessonRequest),
-            presenting: navigator.newLessonRequest.flatMap(store.schoolClass)
-        ) { schoolClass in
-            Button("Založit novou Hodinu") { startNewLesson(schoolClass.id) }
-        } message: { schoolClass in
-            if let last = schoolClass.lastLesson {
-                Text("Hodina „\(last.name)“ se tím definitivně uzavře a už ji nepůjde znovu otevřít, jen prohlížet.")
+        .modifier(SyncFlowDialogs())
+        .overlay(alignment: .bottom) {
+            if let notice = exporter.notice {
+                NoticeBanner(notice: notice) { exporter.notice = nil }
+                    .id(notice.id)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .task {
+                        guard !notice.isError else { return }
+                        try? await Task.sleep(for: .seconds(6))
+                        if exporter.notice?.id == notice.id { exporter.notice = nil }
+                    }
             }
         }
+        .animation(.easeOut(duration: 0.2), value: exporter.notice)
         .confirmationDialog(
             "Smazat Hodinu?",
             isPresented: isPresent($navigator.lessonDeletionRequest),
             presenting: navigator.lessonDeletionRequest
         ) { ref in
             Button("Smazat Hodinu", role: .destructive) {
-                if navigator.openLesson == ref { navigator.openLesson = nil }
-                store.deleteLastLesson(in: ref.classID)
+                flow.deleteLastLesson(in: ref.classID)
             }
         } message: { ref in
             Text(lessonDeletionMessage(ref))
@@ -131,24 +135,67 @@ struct ContentView: View {
         }
     }
 
-    private func startNewLesson(_ classID: UUID) {
-        // Phase 4 hooks in here: final export of the previous lesson and sync with its edited Excel file.
-        if let lessonID = store.createLesson(in: classID) {
-            navigator.openLesson = LessonRef(classID: classID, lessonID: lessonID)
-        }
-    }
-
     private func lessonDeletionMessage(_ ref: LessonRef) -> String {
         guard let schoolClass = store.schoolClass(ref.classID), let lesson = schoolClass.lastLesson else { return "" }
-        var message = "Hodina „\(lesson.name)“ se smaže i se všemi výsledky losování."
+        var message = "Hodina „\(lesson.name)“ se smaže i se všemi výsledky losování. Její případný soubor v Excelu zůstane beze změny."
         if schoolClass.lessons.count > 1 {
             let previous = schoolClass.lessons[schoolClass.lessons.count - 2]
-            message += " Hodina „\(previous.name)“ se pak stane poslední a půjde v ní znovu pokračovat."
+            message += " Hodina „\(previous.name)“ se pak stane poslední a půjde znovu otevřít."
         }
         return message
     }
 
     private func isPresent<T>(_ binding: Binding<T?>) -> Binding<Bool> {
         Binding(get: { binding.wrappedValue != nil }, set: { if !$0 { binding.wrappedValue = nil } })
+    }
+}
+
+/// Dialogs of the new-lesson / export / close flow.
+private struct SyncFlowDialogs: ViewModifier {
+    @Environment(SyncFlow.self) private var flow
+
+    func body(content: Content) -> some View {
+        content
+            .confirmationDialog("Založit novou Hodinu?", isPresented: presented { if case .confirmNewLesson = $0 { true } else { false } }) {
+                Button("Založit novou Hodinu") { flow.confirmNewLesson() }
+                Button("Zrušit", role: .cancel) { flow.cancel() }
+            } message: {
+                if case .confirmNewLesson(let name) = flow.step {
+                    Text("Hodina „\(name)“ se tím definitivně uzavře a už ji nepůjde znovu otevřít, jen prohlížet. Případné úpravy jejího souboru v Excelu vám aplikace teď ukáže. Pozdější úpravy už nenačte – soubor se uzamkne jen pro čtení.")
+                }
+            }
+            .alert("Soubor je otevřený v Excelu", isPresented: presented { if case .excelOpen = $0 { true } else { false } }) {
+                Button("Zkusit znovu") { flow.retryReading() }
+                Button("Pokračovat bez načtení", role: .destructive) { flow.continueWithoutExcel() }
+                Button("Zrušit", role: .cancel) { flow.cancel() }
+            } message: {
+                if case .excelOpen(let fileName) = flow.step {
+                    Text("Uložte a zavřete soubor \(fileName) v Excelu a klikněte na Zkusit znovu. Pokračovat bez načtení použijte, jen když Excel spadl – úpravy ze souboru se nepřevezmou.")
+                }
+            }
+            .alert("Export nelze načíst", isPresented: presented { if case .cannotRead = $0 { true } else { false } }) {
+                Button("Pokračovat") { flow.continueWithoutExcel() }
+                Button("Zrušit", role: .cancel) { flow.cancel() }
+            } message: {
+                if case .cannotRead(let message) = flow.step {
+                    Text(message)
+                }
+            }
+            .sheet(isPresented: presented { if case .review = $0 { true } else { false } }) {
+                if case .review(let result, let fileName) = flow.step {
+                    SyncReviewSheet(result: result, fileName: fileName)
+                        .interactiveDismissDisabled()
+                }
+            }
+    }
+
+    /// Shown while the step matches; dismissing by other means cancels the flow.
+    private func presented(_ matches: @escaping (SyncFlow.Step) -> Bool) -> Binding<Bool> {
+        Binding(
+            get: { flow.step.map(matches) ?? false },
+            set: { isShown in
+                if !isShown, let step = flow.step, matches(step) { flow.cancel() }
+            }
+        )
     }
 }

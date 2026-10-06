@@ -5,6 +5,7 @@ struct LessonListView: View {
     let schoolClass: SchoolClass
     @Environment(ClassStore.self) private var store
     @Environment(Navigator.self) private var navigator
+    @Environment(SyncFlow.self) private var flow
 
     var body: some View {
         List {
@@ -44,9 +45,9 @@ struct LessonListView: View {
                 Menu("Další akce", systemImage: "ellipsis.circle") {
                     if isOpen {
                         Button("Přejmenovat…", systemImage: "pencil") { navigator.lessonRenameRequest = ref }
-                        Button("Uzavřít Hodinu", systemImage: "lock") { store.closeLastLesson(in: schoolClass.id) }
+                        Button("Uzavřít Hodinu", systemImage: "lock") { flow.close(ref) }
                     } else {
-                        Button("Znovu otevřít", systemImage: "lock.open") { store.reopenLastLesson(in: schoolClass.id) }
+                        Button("Znovu otevřít", systemImage: "lock.open") { flow.reopen(ref, thenShow: false) }
                     }
                     Divider()
                     Button("Smazat…", systemImage: "trash", role: .destructive) { navigator.lessonDeletionRequest = ref }
