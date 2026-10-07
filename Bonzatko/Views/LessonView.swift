@@ -7,6 +7,8 @@ struct LessonView: View {
     @Environment(Navigator.self) private var navigator
     @Environment(SyncFlow.self) private var flow
     @AppStorage(SettingsKeys.animationDuration) private var animationDuration = SettingsKeys.defaultAnimationDuration
+    @AppStorage(SettingsKeys.soundEnabled) private var soundEnabled = true
+    @State private var sound = SoundPlayer()
 
     @State private var keyMonitor = KeyMonitor()
     @State private var spinTask: Task<Void, Never>?
@@ -67,6 +69,16 @@ struct LessonView: View {
                 .controlSize(.large)
                 .help("Přejmenovat Hodinu")
             Spacer()
+            Toggle(isOn: $soundEnabled) {
+                Label(soundEnabled ? "Zvuk zapnutý" : "Zvuk vypnutý",
+                      systemImage: soundEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+            }
+            .toggleStyle(.button)
+            .labelStyle(.iconOnly)
+            .controlSize(.large)
+            .help(soundEnabled ? "Vypnout zvuk" : "Zapnout zvuk")
+            SettingsButton()
+                .controlSize(.large)
             Button("Uzavřít Hodinu", systemImage: "lock") {
                 spinTask?.cancel()
                 flow.close(ref)
@@ -208,7 +220,10 @@ struct LessonView: View {
 
     private func spin(pool: [Student], winner: Student) {
         let duration = max(animationDuration, 0)
-        guard duration > 0, pool.count > 1 else { return }
+        guard duration > 0, pool.count > 1 else {
+            sound.click()
+            return
+        }
         let times = DrawEngine.tickTimes(duration: duration)
         var generator = SystemRandomNumberGenerator()
         let names = DrawEngine.spinSequence(pool: pool, winner: winner, length: times.count, using: &generator)
@@ -220,6 +235,7 @@ struct LessonView: View {
                 try? await Task.sleep(until: start + .seconds(time), clock: .continuous)
                 if Task.isCancelled { break }
                 spinningName = name
+                sound.click()
             }
             spinningName = nil
         }

@@ -95,6 +95,9 @@ struct ContentView: View {
                     Button("Nová třída", systemImage: "plus") { isCreatingClass = true }
                         .help("Založit novou třídu")
                 }
+                ToolbarItem(placement: .primaryAction) {
+                    SettingsButton()
+                }
             }
         } detail: {
             switch navigator.sidebarSelection {

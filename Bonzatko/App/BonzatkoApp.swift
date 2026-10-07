@@ -14,5 +14,9 @@ struct BonzatkoApp: App {
                 .frame(minWidth: 760, minHeight: 480)
         }
         .defaultSize(width: 1000, height: 680)
+
+        Settings {
+            SettingsView()
+        }
     }
 }
